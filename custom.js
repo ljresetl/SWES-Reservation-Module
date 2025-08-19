@@ -1,10 +1,11 @@
+// === Data seed (if localStorage is empty) ===
 let bookings = [
-  { employeeID: "222", gear: "Boots", status: "Pending", date: "2025-08-12", returnDate: "" },
-  { employeeID: "222", gear: "Vest", status: "Pending", date: "2025-08-21", returnDate: "" },
-  { employeeID: "222", gear: "Helmet", status: "Pending", date: "2025-08-29", returnDate: "" }
+  { employeeID: "222", gear: "Boots",  status: "Pending",  date: "2025-08-12", returnDate: "" },
+  { employeeID: "222", gear: "Vest",   status: "Pending",  date: "2025-08-21", returnDate: "" },
+  { employeeID: "222", gear: "Helmet", status: "Pending",  date: "2025-08-29", returnDate: "" }
 ];
 
-// --- Converts "dd.mm.yyyy" to "yyyy-mm-dd"; leaves ISO as-is ---
+// --- Converts "dd.mm.yyyy" -> "yyyy-mm-dd"; leaves ISO as-is ---
 function normalizeDate(value) {
   if (!value) return "";
   const m = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/); // dd.mm.yyyy
@@ -12,12 +13,11 @@ function normalizeDate(value) {
     const [, dd, mm, yyyy] = m;
     return `${yyyy}-${mm}-${dd}`;
   }
-  return value; // assume already yyyy-mm-dd (from <input type="date">)
+  // assume already yyyy-mm-dd (Flatpickr uses Y-m-d) or other acceptable ISO-ish
+  return value;
 }
 
-// --- After DOM is loaded ---
 document.addEventListener("DOMContentLoaded", () => {
-
   /* ----------------- EMAIL FORM ----------------- */
   const emailForm = document.getElementById("emailForm");
   const feedback = document.getElementById("emailFeedback");
@@ -27,8 +27,8 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
 
       const userEmail = document.getElementById("recipientEmail").value;
-      const subject = document.getElementById("emailSubject").value;
-      const message = document.getElementById("emailMessage").value;
+      const subject   = document.getElementById("emailSubject").value;
+      const message   = document.getElementById("emailMessage").value;
 
       try {
         const response = await fetch("/api/notify", {
@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
           feedback.innerHTML =
             '<div class="alert alert-danger">❌ An error occurred while sending</div>';
         }
-      } catch (err) {
+      } catch {
         feedback.innerHTML =
           '<div class="alert alert-danger">⚠️ No connection to the server</div>';
       }
@@ -58,38 +58,39 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ----------------- BOOKINGS + CALENDAR ----------------- */
-  const loader = document.getElementById("loader");
-  if (loader) loader.style.display = "block"; // show spinner
+  const loader            = document.getElementById("loader");
+  const tbody             = document.querySelector("#equipmentTable tbody");
+  const noDataMessage     = document.querySelector("#noDataMessage");
+  const bookingDateInput  = document.querySelector("#bookingDate");
+  const today             = new Date().toISOString().split("T")[0];
 
+  if (loader) loader.style.display = "block";
+
+  // Delay only to показати спінер; можна прибрати якщо не треба
   setTimeout(() => {
-    if (loader) loader.style.display = "none"; // hide spinner after loading
+    if (loader) loader.style.display = "none";
 
-    const tbody = document.querySelector("#equipmentTable tbody");
-    const noDataMessage = document.querySelector("#noDataMessage");
-    const bookingDateInput = document.querySelector("#bookingDate");
-    const today = new Date().toISOString().split("T")[0];
-    if (bookingDateInput) bookingDateInput.setAttribute("min", today);
-
-    let currentDate = new Date();
-    let currentMonth = currentDate.getMonth();
-    let currentYear = currentDate.getFullYear();
-
-    // --- Load from localStorage ---
+    // --- Load from localStorage (if exists) ---
     if (localStorage.getItem("bookings")) {
-      bookings = JSON.parse(localStorage.getItem("bookings"));
+      try {
+        bookings = JSON.parse(localStorage.getItem("bookings")) || bookings;
+      } catch {
+        // if parse fails, keep seed
+      }
     }
 
     function saveToStorage() {
       localStorage.setItem("bookings", JSON.stringify(bookings));
     }
 
-    // --- Check for overdue ---
+    // --- Check for overdue (3 days after booking date if still Pending) ---
     function checkOverdue() {
       const now = new Date();
       let changed = false;
+
       bookings.forEach(b => {
         if (b.status === "Pending") {
-          const bookingDate = new Date(b.date);
+          const bookingDate = new Date(`${b.date}T00:00:00`);
           const overdueDate = new Date(bookingDate);
           overdueDate.setDate(overdueDate.getDate() + 3);
           if (now > overdueDate) {
@@ -98,16 +99,17 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
       });
+
       if (changed) saveToStorage();
     }
 
-    // --- Update table ---
+    // --- Render table ---
     function updateTable(data) {
       if (!tbody) return;
       tbody.innerHTML = "";
       checkOverdue();
 
-      if (data.length === 0) {
+      if (!data || data.length === 0) {
         if (noDataMessage) noDataMessage.style.display = "block";
         return;
       } else {
@@ -122,7 +124,9 @@ document.addEventListener("DOMContentLoaded", () => {
           statusBtn.textContent = "With employee";
           statusBtn.className = "btn btn-sm btn-danger";
           statusBtn.addEventListener("click", () => {
-            const confirmReturn = confirm(`Do you want to mark the item "${b.gear}" as returned?`);
+            const confirmReturn = confirm(
+              `Do you want to mark the item "${b.gear}" as returned?`
+            );
             if (confirmReturn) {
               b.status = "Returned";
               b.returnDate = new Date().toISOString().split("T")[0];
@@ -157,45 +161,51 @@ document.addEventListener("DOMContentLoaded", () => {
       renderCalendar(currentMonth, currentYear);
     }
 
-    // --- Add booking ---
+    // --- Add booking (IDs matched to HTML) ---
     const reservationForm = document.querySelector("#reservation form");
     if (reservationForm) {
       reservationForm.addEventListener("submit", function (e) {
         e.preventDefault();
         const employeeID = document.querySelector("#employeeID").value.trim();
-        const gear = document.querySelector("#gearSelect").value;
-        const date = bookingDateInput.value;
-        const status = "Pending";
+        const gear       = document.querySelector("#gearSelectReservation").value;
+        const rawDate    = bookingDateInput.value.trim(); // Flatpickr puts Y-m-d here
+        const dateISO    = normalizeDate(rawDate);
 
-        if (!employeeID || !gear || !date) return;
-        if (date < today) {
+        if (!employeeID || !gear || !dateISO) return;
+
+        // Hard check: block past dates even if хтось увів вручну
+        if (dateISO < today) {
           alert("It is not possible to book a past date!");
           return;
         }
 
-        bookings.push({ employeeID, gear, date, status, returnDate: "" });
+        bookings.push({ employeeID, gear, date: dateISO, status: "Pending", returnDate: "" });
         saveToStorage();
         updateTable(bookings);
         this.reset();
       });
     }
 
-    // --- Filtering with date normalization ---
+    // --- Filtering (IDs matched to HTML) ---
     function applyFilters() {
-      const searchText = document.querySelector("#searchInput")?.value.trim().toLowerCase();
-      const gearSelect = document.querySelector("#gearSelect")?.value;
-      const statusSelect = document.querySelector("#statusSelect")?.value;
+      const searchText   = document.querySelector("#searchInput")?.value.trim().toLowerCase();
+      const gearFilter   = document.querySelector("#gearSelectFilter")?.value;
+      const statusFilter = document.querySelector("#statusSelect")?.value;
 
       // read raw values and normalize to ISO yyyy-mm-dd
-      const rawFrom = document.querySelector("#dateFrom")?.value.trim();
-      const rawTo   = document.querySelector("#dateTo")?.value.trim();
+      const rawFrom  = document.querySelector("#dateFrom")?.value.trim();
+      const rawTo    = document.querySelector("#dateTo")?.value.trim();
       const dateFrom = normalizeDate(rawFrom);
       const dateTo   = normalizeDate(rawTo);
 
       const filtered = bookings.filter(b => {
-        let matchText = !searchText || b.employeeID.toLowerCase().includes(searchText) || b.gear.toLowerCase().includes(searchText);
-        let matchGear = !gearSelect || b.gear === gearSelect;
-        let matchStatus = !statusSelect || b.status === statusSelect;
+        const matchText   =
+          !searchText ||
+          (b.employeeID && b.employeeID.toLowerCase().includes(searchText)) ||
+          (b.gear && b.gear.toLowerCase().includes(searchText));
+
+        const matchGear   = !gearFilter || b.gear === gearFilter;
+        const matchStatus = !statusFilter || b.status === statusFilter;
 
         let matchDate = true;
         if (dateFrom && dateTo) matchDate = b.date >= dateFrom && b.date <= dateTo;
@@ -217,37 +227,55 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Calendar ---
+    const calendarBody       = document.getElementById("calendarBody");
+    const currentMonthLabel  = document.getElementById("currentMonth");
+    let currentDate          = new Date();
+    let currentMonth         = currentDate.getMonth();
+    let currentYear          = currentDate.getFullYear();
+
     function renderCalendar(month, year) {
-      const calendarBody = document.getElementById("calendarBody");
-      const currentMonthLabel = document.getElementById("currentMonth");
       if (!calendarBody || !currentMonthLabel) return;
 
       calendarBody.innerHTML = "";
 
-      const firstDay = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      currentMonthLabel.textContent = `${year} - ${month + 1}`;
+      const firstDay     = new Date(year, month, 1).getDay();
+      const daysInMonth  = new Date(year, month + 1, 0).getDate();
+
+      currentMonthLabel.textContent = new Date(year, month, 1).toLocaleString("default", {
+        month: "long",
+        year: "numeric",
+      });
 
       let date = 1;
       for (let i = 0; i < 6; i++) {
         const row = document.createElement("tr");
         for (let j = 0; j < 7; j++) {
           const cell = document.createElement("td");
-          if (i === 0 && j < firstDay) cell.textContent = "";
-          else if (date > daysInMonth) cell.textContent = "";
-          else {
+          if (i === 0 && j < firstDay) {
+            cell.textContent = "";
+          } else if (date > daysInMonth) {
+            cell.textContent = "";
+          } else {
             cell.textContent = date;
             const cellDateStr = `${year}-${String(month + 1).padStart(2,"0")}-${String(date).padStart(2,"0")}`;
+
+            // highlight booking days
             if (bookings.some(b => b.date === cellDateStr)) {
               cell.style.backgroundColor = "#ffcccc";
               cell.style.fontWeight = "bold";
             }
-            if (cellDateStr < today) cell.style.color = "#aaa";
+
+            // grey out past days
+            if (cellDateStr < today) {
+              cell.style.color = "#aaa";
+            }
+
             date++;
           }
           row.appendChild(cell);
         }
         calendarBody.appendChild(row);
+        if (date > daysInMonth) break;
       }
     }
 
@@ -271,14 +299,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Initial render ---
     updateTable(bookings);
+    renderCalendar(currentMonth, currentYear);
+  }, 300);
 
-  }, 1000); // delay for spinner
-});
-
-// --- Nav tabs ---
-document.addEventListener("DOMContentLoaded", () => {
+  // --- Nav tabs active state ---
   const navLinks = document.querySelectorAll(".nav-tabs .nav-link");
-
   navLinks.forEach(link => {
     link.addEventListener("click", function () {
       navLinks.forEach(l => l.classList.remove("active"));

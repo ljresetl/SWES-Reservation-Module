@@ -20,6 +20,16 @@
       rel="stylesheet"
     />
 
+    <!-- Flatpickr CSS (Bootstrap-like theme) -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css"
+    />
+
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -62,8 +72,10 @@
             </div>
 
             <div class="col-md-6">
-              <label for="gearSelect" class="form-label">Equipment</label>
-              <select class="form-select" id="gearSelect" required>
+              <label for="gearSelectReservation" class="form-label"
+                >Equipment</label
+              >
+              <select class="form-select" id="gearSelectReservation" required>
                 <option value="">Select equipment</option>
                 <option value="Boots">Boots</option>
                 <option value="Vest">Vest</option>
@@ -76,10 +88,10 @@
                 >Reservation Date</label
               >
               <input
-                type="date"
+                type="text"
                 class="form-control"
                 id="bookingDate"
-                placeholder="Date (dd.mm.yyyy)"
+                placeholder="Select date"
                 required
               />
             </div>
@@ -103,7 +115,7 @@
               />
             </div>
             <div class="col-md-2">
-              <select id="gearSelect" class="form-select">
+              <select id="gearSelectFilter" class="form-select">
                 <option value="">All types</option>
                 <option value="Boots">Boots</option>
                 <option value="Vest">Vest</option>
@@ -112,18 +124,18 @@
             </div>
             <div class="col-md-2">
               <input
-                type="date"
+                type="text"
                 id="dateFrom"
                 class="form-control"
-                placeholder="Date from (dd.mm.yyyy)"
+                placeholder="From"
               />
             </div>
             <div class="col-md-2">
               <input
-                type="date"
+                type="text"
                 id="dateTo"
                 class="form-control"
-                placeholder="Date to (dd.mm.yyyy)"
+                placeholder="To"
               />
             </div>
             <div class="col-md-2">
@@ -252,6 +264,41 @@
     </footer>
     <div id="loader" class="loader"></div>
 
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Flatpickr JS -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+    <!-- Custom JS -->
     <script src="./custom.js" defer></script>
+
+    <!-- Init Flatpickr -->
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        // Reservation date — NO past dates
+        flatpickr("#bookingDate", {
+          dateFormat: "Y-m-d",
+          minDate: "today", // <-- block past dates
+          allowInput: false, // <-- no manual typing of past dates
+          disableMobile: true, // <-- force Flatpickr on iPhone
+          theme: "material_blue",
+        });
+
+        // Filters — allow any dates
+        flatpickr("#dateFrom", {
+          dateFormat: "Y-m-d",
+          allowInput: true,
+          disableMobile: true,
+          theme: "material_blue",
+        });
+        flatpickr("#dateTo", {
+          dateFormat: "Y-m-d",
+          allowInput: true,
+          disableMobile: true,
+          theme: "material_blue",
+        });
+      });
+    </script>
   </body>
 </html>
